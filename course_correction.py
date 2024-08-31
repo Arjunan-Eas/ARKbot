@@ -105,5 +105,5 @@ for i in range(500):
     previous_gx, previous_gy, previous_gz = gx, gy, gz
 
     with open('data.txt', 'a') as f:
-        f.write(f'{ax},{ay},{az},{gx},{gy},{gz}\n')
+        f.write(f'{ax},{ay},{az},{gx},{gy},{gz},{time.time()}\n')
 send("m1-000m2-000m3-000m4-000")

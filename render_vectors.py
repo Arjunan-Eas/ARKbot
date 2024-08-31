@@ -63,9 +63,9 @@ def animate(i):
 
 # Read data
 data = read_data(file_path)
-
+print(data)
 # Create animation
-ani = animation.FuncAnimation(fig, animate, init_func=init, frames=len(data), interval=100, blit=True)
+ani = animation.FuncAnimation(fig, animate, init_func=init, frames=len(data), interval=10, blit=True)
 
 # Show the plot
 plt.legend()
