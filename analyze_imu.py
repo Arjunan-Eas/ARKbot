@@ -1,6 +1,6 @@
 import math
 
-INPUT_FILE = 'data.txt'
+INPUT_FILE = 'filtered_data.txt'
 OUTPUT_FILE = 'trajectory.txt'
 N = 50
 
@@ -14,10 +14,10 @@ def update_telemetry(sensor_data, telemetry, previous_data, rolling_avgs):
     for i in range(3):
         # Calculate rolling average before new value
         rolling_avgs[i][0] = average(previous_data[i])
-
+        
         # Make sure to limit rolling average interval to N
         while(len(previous_data[i]) >= N):
-            previous_data.pop(0)
+            previous_data[i].pop(0)
         
         # Add new values to list
         previous_data[i].append(new_vals[i])
@@ -27,7 +27,7 @@ def update_telemetry(sensor_data, telemetry, previous_data, rolling_avgs):
 
         # Integrate each rate
         telemetry[i] += trapezoid_rule(rolling_avgs[i], dTime)
-    
+
     # Update time and interval
     telemetry[3] = sensor_data[6]
     telemetry[4] = dTime
@@ -36,7 +36,8 @@ def update_telemetry(sensor_data, telemetry, previous_data, rolling_avgs):
     for i in range(3, 5):
 
         while(len(previous_data[i]) >= N):
-            previous_data.pop(0)
+            previous_data[i].pop(0)
+
 
     previous_data[3].append(telemetry[2] / (math.pi / 180))
     rolling_avgs[3] = average(previous_data[3])
@@ -59,19 +60,20 @@ def update_position(telemetry, rolling_avgs, position):
     thetaG = telemetry[2] / (math.pi / 180)
     thetaA = math.atan(telemetry[0] / telemetry[1])
 
-    sG = abs((rolling_avgs[3] - thetaG) / thetaG)
-    sA = abs((rolling_avgs[4] - thetaA) / thetaA)
+    if(rolling_avgs[3] != thetaG and rolling_avgs[4] != thetaA):
+        sG = abs((rolling_avgs[3] - thetaG) / thetaG)
+        sA = abs((rolling_avgs[4] - thetaA) / thetaA)
 
-    thetaF = thetaG * (sG / (sG + sA)) + thetaA * (sA / (sG + sA))
+        thetaF = thetaG * (sG / (sG + sA)) + thetaA * (sA / (sG + sA))
 
-    speed = ((telemetry[0] ** 2) + (telemetry[1] ** 2)) ** 0.5
+        speed = ((telemetry[0] ** 2) + (telemetry[1] ** 2)) ** 0.5
 
-    deltaX = speed * math.sin(thetaF) * telemetry[4]
-    deltaY = speed * math.cos(thetaF) * telemetry[4]
+        deltaX = speed * math.sin(thetaF) * telemetry[4]
+        deltaY = speed * math.cos(thetaF) * telemetry[4]
 
-    position[0] += deltaX
-    position[1] += deltaY
-    position[2] = telemetry[3]
+        position[0] += deltaX
+        position[1] += deltaY
+        position[2] = telemetry[3]
 
     return position
 
@@ -93,8 +95,8 @@ def main(INPUT_FILE, OUTPUT_FILE):
     rolling_avgs = [[0, 0], [0, 0], [0, 0], 0, 0]
 
     with open(INPUT_FILE, 'r') as f:
-        initial_data = f.readline().split(',')
-
+        initial_data = [float(val) for val in f.readline().split(',')]
+        
         # Include initial values
         previous_data[0].append(initial_data[0])
         previous_data[1].append(initial_data[1])
@@ -102,11 +104,15 @@ def main(INPUT_FILE, OUTPUT_FILE):
         telemetry[3] = initial_data[6]
 
     with open(INPUT_FILE, 'r') as f:
+        counter = 0
         for line in f:
-            sensor_data = line.split(',')
-            telemetry, previous_data, rolling_avgs = update_telemetry(sensor_data, telemetry, previous_data)
-            position = update_position(telemetry, rolling_avgs, position)
-            with open(OUTPUT_FILE, 'a') as g:
-                g.write(f'{position[0]},{position[1]},{position[3]}\n')
+            if counter == 1:
+                sensor_data = [float(val) for val in line.split(',')]
+                telemetry, previous_data, rolling_avgs = update_telemetry(sensor_data, telemetry, previous_data, rolling_avgs)
+                position = update_position(telemetry, rolling_avgs, position)
+                with open(OUTPUT_FILE, 'a') as g:
+                    g.write(f'{position[0]},{position[1]},{position[2]}\n')
+            else:
+                counter = 1
 
-    print("Done!")
+main(INPUT_FILE, OUTPUT_FILE)
