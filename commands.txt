@@ -1,3 +1,12 @@
 scp rishabh@192.168.1.20:/home/rishabh/ARKbot/data.txt C:/Users/arjun/OneDrive/Documents/ARKbot/data.txt
 
+scp rishabh@192.168.1.20:/home/rishabh/ARKbot/analysis.txt C:/Users/arjun/OneDrive/Documents/ARKbot/analysis.txt
+
 sudo shutdown -h now
+
+bluetoothctl
+power on
+agent on
+default-agent
+scan on
+pair <MAC>

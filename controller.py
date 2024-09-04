@@ -12,27 +12,29 @@ i2c_bus_number = 7  # Change to your I2C bus number if different
 i2c_device_address = 0x08  # Change to your device address
 
 # Rate limiting parameters
-messages_per_second = 50  # Limit to 10 messages per second
-min_time_between_sends = 1.0 / messages_per_second  # Minimum time between sends
-last_send_time = 0  # Initialize last send time
+old_value = 0
+VALUE_THRESHOLD = 10
 
-def send(command):
-    global last_send_time
-    current_time = time.time()
-    
+def send(command, value=1000):
+    global old_value
+
     # Check if enough time has passed since the last send
-    if current_time - last_send_time >= min_time_between_sends:
+    if(value == 1000):
         with SMBus(i2c_bus_number) as bus:
             # Create an I2C message with the data
             msg = i2c_msg.write(i2c_device_address, command)
             # Write the message to the I2C bus
             bus.i2c_rdwr(msg)
-        print("Data sent successfully")
-        
-        # Update last send time
-        last_send_time = current_time
+    elif((abs(value - old_value) > VALUE_THRESHOLD)):
+        with SMBus(i2c_bus_number) as bus:
+            # Create an I2C message with the data
+            msg = i2c_msg.write(i2c_device_address, command)
+            # Write the message to the I2C bus
+            bus.i2c_rdwr(msg)
+        print(f'old: {old_value} new: {value}')
+        old_value = value
     else:
-        print("Rate limit exceeded, skipping send")
+        print("Duplicate command, or not significant speed change")
 
 # Setup controller
 game_controller = None
@@ -46,6 +48,7 @@ else:
 # Threshold for detecting significant movement on an axis
 MOVEMENT_THRESHOLD = 0.1
 JOYSTICK_MAX = 32767
+JOYSTICK_DEADZONE = 7500
 
 def to_byte_list(string):
     return [ord(char) for char in string]
@@ -57,7 +60,7 @@ def drive_forward(value):
         value = '0' + value
     command_str = f"m1-{value}m2-{value}m3-{value}m4-{value}"
     command = to_byte_list(command_str)
-    send(command)
+    send(command, int(value))
 
 def reverse(value):
     value = str(round((value / JOYSTICK_MAX) * 255))
@@ -65,7 +68,7 @@ def reverse(value):
         value = '0' + value
     command_str = f"m1+{value}m2+{value}m3+{value}m4+{value}"
     command = to_byte_list(command_str)
-    send(command)
+    send(command, int(value))
 
 def left_in_place():
     value = '255'
@@ -86,20 +89,22 @@ def stop():
     send(command)
 
 def standard_right(value):
-    value = str(round((value / JOYSTICK_MAX) * 255))
-    while len(value) < 3:
-        value = '0' + value
-    command_str = f"m1-{value}m2+{value}m3+000m4+000"
-    command = to_byte_list(command_str)
-    send(command)
+    if abs(value) > JOYSTICK_DEADZONE:
+        value = str(round((value / JOYSTICK_MAX) * 255))
+        while len(value) < 3:
+            value = '0' + value
+        command_str = f"m1-{value}m2+{value}m3+000m4+000"
+        command = to_byte_list(command_str)
+        send(command, int(value))
 
 def standard_left(value):
-    value = str(round((-value / JOYSTICK_MAX) * 255))
-    while len(value) < 3:
-        value = '0' + value
-    command_str = f"m1+{value}m2-{value}m3+000m4+000"
-    command = to_byte_list(command_str)
-    send(command)
+    if abs(value) > JOYSTICK_DEADZONE:
+        value = str(round((-value / JOYSTICK_MAX) * 255))
+        while len(value) < 3:
+            value = '0' + value
+        command_str = f"m1+{value}m2-{value}m3+000m4+000"
+        command = to_byte_list(command_str)
+        send(command, int(value))
 
 def parallel_right():
     value = '255'

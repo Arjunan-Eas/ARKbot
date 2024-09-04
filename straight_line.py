@@ -9,25 +9,26 @@ ACCEL_YOUT_H = 0x3D
 ACCEL_ZOUT_H = 0x3F
 GYRO_ZOUT_H = 0x47
 
-CORRECTION_FACTOR = 2
-WINDOW = 50
+cor_lims = [2.5]
+cor_facs = [1]
+wins = [1]
 
 # Initialize the I2C bus
 bus = smbus2.SMBus(1)
 
 def course_correct(direction, amount, motors):
     if direction == "left":
-        if((0 + amount < motors[0] < 255 - amount) and (0 + amount < motors[3] < 255 - amount)):
+        if((0 + amount <= motors[0] <= 255) and (0 + amount <= motors[3] <= 255)):
             motors[0] -= amount
             motors[3] -= amount
-        if((0 + amount < motors[1] < 255 - amount) and (0 + amount < motors[2] < 255 - amount)):
+        if((0 <= motors[1] <= 255 - amount) and (0 <= motors[2] <= 255 - amount)):
             motors[1] += amount
             motors[2] += amount
     elif direction == "right":
-        if((0 + amount < motors[0] < 255 - amount) and (0 + amount < motors[3] < 255 - amount)):
+        if((0 <= motors[0] <= 255 - amount) and (0 <= motors[3] <= 255 - amount)):
             motors[0] += amount
             motors[3] += amount
-        if((0 + amount < motors[1] < 255 - amount) and (0 + amount < motors[2] < 255 - amount)):
+        if((0 + amount <= motors[1] <= 255) and (0 + amount <= motors[2] <= 255)):
             motors[1] -= amount
             motors[2] -= amount
     print(f'motors: {motors}')
@@ -100,25 +101,19 @@ accel_bias_x, accel_bias_y, accel_bias_z, gyro_bias_z = calibrate_imu()
 vx, vy, vz = 0, 0, 0
 last_time = time.time()
 
-with open('data.txt', 'w') as f:
-    pass
-
-motors = [100, 100, 100, 100]
-
-send(f'm1-{motors[0]}m2-{motors[1]}m3-{motors[2]}m4-{motors[3]}')
-time.sleep(0.5)
 
 rotation_list = []
 
-def main():
+def main(initial_speed, window, correction_factor, correction_limit):
 
-    global last_time
-    motors = [100, 100, 100, 100]
+    motors = [initial_speed, initial_speed, initial_speed, initial_speed]
+    send(f'm1-{motors[0]}m2-{motors[1]}m3-{motors[2]}m4-{motors[3]}')
+    
+    time.sleep(0.5)
+    with open('data.txt', 'w') as f:
+        pass
+
     for i in range(100):
-        # Calculate time difference
-        current_time = time.time()
-        dt = current_time - last_time
-        last_time = current_time
 
         # Read gyroscope data (only Z-axis)
         gz = get_gyro_data()
@@ -126,23 +121,23 @@ def main():
         # Subtract the bias to get the corrected gyroscope reading
         gz -= gyro_bias_z
 
-        if(len(rotation_list) > WINDOW):
+        if(len(rotation_list) > window):
             rotation_list.pop(0)
         rotation_list.append(gz)
 
         rolling_avg = (sum(rotation_list) / len(rotation_list))
         
-        if( rolling_avg > 0.75):
+        if( rolling_avg > correction_limit):
             print('cor right')
-            motors = course_correct("right", CORRECTION_FACTOR, motors)
+            motors = course_correct("right", correction_factor, motors)
 
             l = format_motor_values(motors)
 
             send(f'm1-{l[0]}m2-{l[1]}m3-{l[2]}m4-{l[3]}')
 
-        elif(rolling_avg < -0.75):
+        elif(rolling_avg < -correction_limit):
             print('cor left')
-            motors = course_correct("left", CORRECTION_FACTOR, motors)
+            motors = course_correct("left", correction_factor, motors)
 
             l = format_motor_values(motors)
             
@@ -151,10 +146,49 @@ def main():
         
         # Print the results
         with open('data.txt', 'a') as f:
-            f.write(f"{rolling_avg},{motors[0]},{motors[1]},{motors[2]},{motors[3]}\n")
+            f.write(f"{rolling_avg},{motors[0]},{motors[1]},{motors[2]},{motors[3]},{time.time()}\n")
 
         # Short delay before next reading
         time.sleep(0.005)
     send('m1-000m2-000m3-000m4-000')
 
-main()
+def analyze(initial_speed, window, correction_factor, correction_limit):
+
+    gz_values = []
+    m1_values = []
+    m2_values = []
+    m3_values = []
+    m4_values = []
+    time_values = []
+
+    with open('data.txt', 'r') as file:
+        for line in file:
+            # Split the line by comma to extract the values
+            values = line.strip().split(',')
+            
+            # Ensure that there are exactly 5 values per line
+            if len(values) == 6:
+                gz, m1, m2, m3, m4, t = map(float, values)
+                gz_values.append(gz)
+                m1_values.append(m1)
+                m2_values.append(m2)
+                m3_values.append(m3)
+                m4_values.append(m4)
+                time_values.append(t)
+    
+    angle_delta = 0
+    for i in range(len(gz_values) - 1):
+        angle_delta += ((gz_values[i] + gz_values[i + 1]) / 2) * (time_values[i + 1] - time_values[i])
+
+    left_drive_avg = sum(m1_values) / len(m1_values)
+    right_drive_avg = sum(m2_values) / len(m2_values)
+    
+    with open('analysis.txt', 'a') as f:
+        f.write(f'Init sp: {initial_speed} Win: {window} CF: {correction_factor} CL: {correction_limit} -> Angle delta: {angle_delta} L avg: {left_drive_avg} R avg: {right_drive_avg}\n')
+
+for window in wins:
+    for factor in cor_facs:
+        for limit in cor_lims:
+            main(100,window,factor,limit)
+            analyze(100,window,factor,limit)
+            time.sleep(15)
