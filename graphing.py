@@ -1,56 +1,60 @@
 import matplotlib.pyplot as plt
+import numpy as np
 
-# Initialize lists to store the data and deltas
-gz_values = []
-m1_values = []
-m2_values = []
-m3_values = []
-m4_values = []
+# Function to read data from file
+def read_data(file_path):
+    correction_list = []
+    derivative_list = []
+    deriv_list = []
+    prop_list = []
+    gz_list = []
+    m1_list = []
+    m2_list = []
 
-m1_deltas = []
-m2_deltas = []
-m3_deltas = []
-m4_deltas = []
+    with open(file_path, 'r') as file:
+        for line in file:
+            # Strip any whitespace and split by comma
+            values = line.strip().split(',')
+            if len(values) == 8:  # Ensure correct format
+                correction, derivative, deriv, prop, gz, m1, m2, _ = map(float, values)
+                correction_list.append(correction)
+                derivative_list.append(derivative)
+                deriv_list.append(deriv)
+                prop_list.append(prop)
+                gz_list.append(gz)
+                m1_list.append(m1)
+                m2_list.append(m2)
 
-# Read the data file
-with open('data.txt', 'r') as file:
-    for line in file:
-        # Split the line by comma to extract the values
-        values = line.strip().split(',')
-        
-        # Ensure that there are exactly 5 values per line
-        if len(values) == 5:
-            gz, m1, m2, m3, m4 = map(float, values)
-            gz_values.append(gz)
-            m1_values.append(m1)
-            m2_values.append(m2)
-            m3_values.append(m3)
-            m4_values.append(m4)
+    
+    return correction_list, derivative_list, deriv_list, prop_list, gz_list, m1_list, m2_list
 
-# Calculate the deltas for each motor
-for i in range(1, len(m1_values)):
-    m1_deltas.append(m1_values[i] - m1_values[i - 1])
-    m2_deltas.append(m2_values[i] - m2_values[i - 1])
-    m3_deltas.append(m3_values[i] - m3_values[i - 1])
-    m4_deltas.append(m4_values[i] - m4_values[i - 1])
+# Function to apply a rolling average filter
+def rolling_average(data, window_size):
+    return np.convolve(data, np.ones(window_size) / window_size, mode='valid')
 
-# Plotting the delta data and gz values
-plt.figure(figsize=(10, 6))
+# Function to plot gz data with and without rolling average filter
+def plot_gz(rlist, filtered_list):
+    plt.figure(figsize=(10, 6))
+    plt.plot(rlist, label='Original', color='blue', alpha=0.5)
+    plt.plot(range(len(filtered_list)), filtered_list, label='Filtered', color='red')
+    plt.xlabel('Time (arbitrary units)')
+    plt.ylabel('value')
+    plt.title('over Time with Rolling Average Filter')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
-# Plot the deltas of each motor
-plt.plot(m1_deltas, label="Delta Motor 1", color="blue")
-plt.plot(m2_deltas, label="Delta Motor 2", color="green")
-plt.plot(m3_deltas, label="Delta Motor 3", color="red")
-plt.plot(m4_deltas, label="Delta Motor 4", color="purple")
+# Main function
+def main():
+    file_path = 'data.txt'  # Replace with your file path
+    correction_list, derivative_list, deriv_list, prop_list, gz_list, m1_list, m2_list = read_data(file_path)
+    
+    # Apply rolling average filter (e.g., window size of 5)
+    window_size = 1
+    filtered_list = rolling_average(gz_list, window_size)
+    
+    # Plot gz data with and without rolling average filter
+    plot_gz(derivative_list, filtered_list)
 
-# Plot the gz values
-plt.plot(gz_values[1:], label="GZ (Gyro Z)", color="black", linestyle="--")  # Slice to align with delta arrays
-
-# Add labels and title
-plt.xlabel("Sample Number")
-plt.ylabel("Delta / GZ Values")
-plt.title("Delta of Motor Values and GZ Over Time")
-plt.legend()
-
-# Display the plot
-plt.show()
+if __name__ == "__main__":
+    main()

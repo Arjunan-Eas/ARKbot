@@ -4,10 +4,7 @@ import time
 
 # MPU6500 Registers
 MPU6500_ADDR = 0x68
-ACCEL_XOUT_H = 0x3B
-ACCEL_YOUT_H = 0x3D
-ACCEL_ZOUT_H = 0x3F
-GYRO_ZOUT_H = 0x47
+GYRO_YOUT_H = 0x45
 
 cor_lims = [2.5]
 cor_facs = [1]
@@ -16,7 +13,7 @@ wins = [1]
 # Initialize the I2C bus
 bus = smbus2.SMBus(1)
 
-def course_correct(direction, amount, motors):
+def straight_course_correct(direction, amount, motors):
     if direction == "left":
         if((0 + amount <= motors[0] <= 255) and (0 + amount <= motors[3] <= 255)):
             motors[0] -= amount
@@ -129,7 +126,7 @@ def main(initial_speed, window, correction_factor, correction_limit):
         
         if( rolling_avg > correction_limit):
             print('cor right')
-            motors = course_correct("right", correction_factor, motors)
+            motors = straight_course_correct("right", correction_factor, motors)
 
             l = format_motor_values(motors)
 
@@ -137,7 +134,7 @@ def main(initial_speed, window, correction_factor, correction_limit):
 
         elif(rolling_avg < -correction_limit):
             print('cor left')
-            motors = course_correct("left", correction_factor, motors)
+            motors = straight_course_correct("left", correction_factor, motors)
 
             l = format_motor_values(motors)
             

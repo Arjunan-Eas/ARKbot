@@ -1,26 +1,15 @@
-# MIT License
-# Copyright (c) 2019-2022 JetsonHacks
-
-# Using a CSI camera (such as the Raspberry Pi Version 2) connected to a
-# NVIDIA Jetson Nano Developer Kit using OpenCV
-# Drivers for the camera and OpenCV are included in the base image
-
 import cv2
-
-""" 
-gstreamer_pipeline returns a GStreamer pipeline for capturing from the CSI camera
-Flip the image by setting the flip_method (most common values: 0 and 2)
-display_width and display_height determine the size of each camera pane in the window on the screen
-Default 1920x1080 displayd in a 1/4 size window
-"""
+import numpy as np
+import time
+import argparse
 
 def gstreamer_pipeline(
     sensor_id=0,
-    capture_width=1920,
-    capture_height=1080,
-    display_width=960,
-    display_height=540,
-    framerate=30,
+    capture_width=480,
+    capture_height=270,
+    display_width=480,
+    display_height=270,
+    framerate=15,
     flip_method=0,
 ):
     return (
@@ -41,35 +30,77 @@ def gstreamer_pipeline(
         )
     )
 
+# Ball detection using color filtering (for blue color)
+def detect_blue_ball(frame):
+    # Convert the frame to HSV color space
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-def show_camera():
-    window_title = "CSI Camera"
+    # Define the lower and upper range for the blue color in HSV
+    lower_blue = np.array([0, 187, 53])
+    upper_blue = np.array([75, 255, 176])
 
-    # To flip the image, modify the flip_method parameter (0 and 2 are the most common)
-    print(gstreamer_pipeline(flip_method=1))
-    video_capture = cv2.VideoCapture(gstreamer_pipeline(flip_method=0), cv2.CAP_GSTREAMER)
-    if video_capture.isOpened():
-        try:
-            window_handle = cv2.namedWindow(window_title, cv2.WINDOW_AUTOSIZE)
-            while True:
-                ret_val, frame = video_capture.read()
-                # Check to see if the user closed the window
-                # Under GTK+ (Jetson Default), WND_PROP_VISIBLE does not work correctly. Under Qt it does
-                # GTK - Substitute WND_PROP_AUTOSIZE to detect if window has been closed by user
-                if cv2.getWindowProperty(window_title, cv2.WND_PROP_AUTOSIZE) >= 0:
-                    cv2.imshow(window_title, frame)
-                else:
-                    break 
-                keyCode = cv2.waitKey(10) & 0xFF
-                # Stop the program on the ESC key or 'q'
-                if keyCode == 27 or keyCode == ord('q'):
-                    break
-        finally:
-            video_capture.release()
-            cv2.destroyAllWindows()
-    else:
-        print("Error: Unable to open camera")
+    frame_HSV = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    # Create a mask that isolates the blue colors in the frame
+    mask = cv2.inRange(frame_HSV, lower_blue, upper_blue)
 
+    # Bitwise-AND mask and original frame to show the blue ball
+    result = cv2.bitwise_and(frame, frame, mask=mask)
 
-if __name__ == "__main__":
-    show_camera()
+    cv2.imshow('masked',mask)
+
+    # Detect circles using HoughCircles on the masked image
+    gray = cv2.cvtColor(result, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (15, 15), 0)
+
+    circles = cv2.HoughCircles(blurred, cv2.HOUGH_GRADIENT, dp=1.2, minDist=50, param1=100, param2=30, minRadius=20, maxRadius=100)
+
+    num_circles = 0
+    # If circles are detected, draw them on the frame
+    if circles is not None:
+        circles = np.round(circles[0, :]).astype("int")
+        for (x, y, r) in circles:
+            # Draw the circle
+            cv2.circle(frame, (x, y), r, (0, 255, 0), 4)
+            # Draw a rectangle to show the center of the circle
+            cv2.rectangle(frame, (x - 5, y - 5), (x + 5, y + 5), (0, 128, 255), -1)
+        num_circles = len(circles)
+
+    return frame, num_circles
+
+# Initialize video capture from the webcam
+# cap = cv2.VideoCapture(gstreamer_pipeline(flip_method=0), cv2.CAP_GSTREAMER)
+parser = argparse.ArgumentParser(description='Code for Thresholding Operations using inRange tutorial.')
+parser.add_argument('--camera', help='Camera divide number.', default=0, type=int)
+args = parser.parse_args()
+cap = cv2.VideoCapture(args.camera)
+
+# Variable to keep track of how many frames with balls were saved
+image_counter = 0
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
+    
+    # Detect the ball in the frame
+    frame_with_ball, balls_detected = detect_blue_ball(frame)
+    print(balls_detected)
+    # If balls are detected, save the frame as an image
+    if balls_detected > 0:
+        image_filename = f"photos/detected_balls_{image_counter}.jpg"
+        # cv2.imwrite(image_filename, frame_with_ball)
+        print(f"Saved {image_filename} with {balls_detected} ball(s) detected.")
+        image_counter += 1
+
+    # Display the result (optional, you can uncomment this if needed)
+    cv2.imshow('Ball Detection', frame_with_ball)
+
+    # Exit the loop when 'q' is pressed
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+    time.sleep(1)
+
+# Release the video capture and close windows
+cap.release()
+cv2.destroyAllWindows()
